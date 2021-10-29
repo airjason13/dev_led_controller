@@ -109,13 +109,13 @@ static inline void put_pixel_by_panel(uint8_t panel_id, uint32_t pixel_grb) {
             pio_sm_put_blocking(pio1, 0, pixel_grb << 8u);
             break;    
         case 5:
-            pio_sm_put_blocking(pio0, 1, pixel_grb << 8u);
+            pio_sm_put_blocking(pio1, 1, pixel_grb << 8u);
             break;    
         case 6:
-            pio_sm_put_blocking(pio0, 2, pixel_grb << 8u);
+            pio_sm_put_blocking(pio1, 2, pixel_grb << 8u);
             break;    
         case 7:
-            pio_sm_put_blocking(pio0, 3, pixel_grb << 8u);
+            pio_sm_put_blocking(pio1, 3, pixel_grb << 8u);
             break;    
         default:
             printf("error!no such panel id: %d\n", panel_id);
@@ -674,11 +674,16 @@ uint8_t tmp_buf[64];
 
 int8_t get_id_num(uint8_t *buf){
     
-    uint8_t id_tmp = -1;
+    int8_t id_tmp = -1;
+	//printf("Abuf :%s\n", buf);
     if(strncmp("cmd:", buf, 4) == 0){
         printf("got cmd!\n");
         return -2;
+    }else if(strncmp("Hello", buf, 5) == 0){
+        printf("got Hello!\n");
+		return -3;
     }else{
+		//printf("Bbuf :%s\n", buf);
         if(strncmp("id0:", buf, 4) == 0){
             id_tmp = 0;
         }else if(strncmp("id1:", buf, 4) == 0){
@@ -696,13 +701,15 @@ int8_t get_id_num(uint8_t *buf){
         }else if(strncmp("id7:", buf, 4) == 0){
             id_tmp = 7;
         }else{
+			//printf("Cbuf :%s\n", buf);
             id_tmp = -1;
             return id_tmp;//follow ori id
         }
     }
     if(panel_id != id_tmp){
-        printf("id_tmp = %d\n", id_tmp);
-        printf("data_offset = %d\n", data_offset);
+        //printf("id_tmp = %d\n", id_tmp);
+        //printf("data_offset = %d\n", data_offset);
+		//printf(" %d %d\n", id_tmp, data_offset);
         data_offset = 0;
         panel_id = id_tmp;
     }
@@ -722,7 +729,7 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
         memcpy((led_rgb_buf[panel_id]), buf + 4, len - 4 );
         data_offset += len-4; 
     }else{
-        printf("Error!\n");
+        //printf("buf : %s!\n", buf);
     }
     /*if(get_id_num(buf) != -1){
         memcpy(&led_rgb_buf[panel_id] + data_offset, buf, len);
@@ -745,19 +752,37 @@ void ep2_in_handler(uint8_t *buf, uint16_t len) {
 
 int main(void) {
     unsigned int pattern = 0;
+	int n,m;
     stdio_init_all();
     printf("USB Device Low-Level hardware example\n");
     usb_device_init();
     pio_initial();
+#if 0 //marked gpio irq function
     int ret = gpio_get_dir(15);
     printf("gpio 15 dir is %d\n", ret); //default is in
     gpio_pull_up(15);
     gpio_irq_enable(15, &gpio_callback, GPIO_IRQ_EDGE_RISE );
+#endif	
     // Wait until configured
     while (!configured) {
         tight_loop_contents();
     }
 
+	//fill initial color
+    for(int n = 0; n < LED_PANEL_COUNT; n++){
+		for(int m = 0; m < 2880; m++ ){
+			if((m%3) == 0){               //0x400000 400000 400000  => red
+				led_rgb_buf[n][m] = 0x08;
+			}if((m%3) == 2){                 //0x000040 000040 000040  => blue
+				led_rgb_buf[n][m] = 0x08;
+			}if((m%3) == 1){                 //0x004000 004000 004000  => green 
+				led_rgb_buf[n][m] = 0x08;
+			}
+            /*else{
+				led_rgb_buf[n][m] = 0x00;	
+			}*/
+		}
+	}
     // Get ready to rx from host
     usb_start_transfer(usb_get_endpoint_configuration(EP1_OUT_ADDR), NULL, 64);
 
@@ -766,20 +791,19 @@ int main(void) {
     while (1) {
         //tight_loop_contents(); //marked this busy loop
 	    //test pattern
-
 	    for(int j = 0; j < LED_HEIGHT; j++){
 	        for(int i = 0; i < LED_WIDTH; i++){
-                for(int n = 0; n < LED_PANEL_COUNT; n ++){
-                    pattern = led_rgb_buf[n][j*LED_WIDTH + i*COLOR_CHANNEL] + 
-                                ((led_rgb_buf[n][j*LED_WIDTH + i*COLOR_CHANNEL + 1]) << 8) +
-                                ((led_rgb_buf[n][j*LED_WIDTH + i*COLOR_CHANNEL + 2]) << 16);
+                for(n = 0; n < LED_PANEL_COUNT; n ++){
+                    pattern = (led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
+                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
+                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
                     //printf("pattern : 0x%x\n", pattern);             
                     put_pixel_by_panel(n, pattern);
                 }
 	        }
 	    }
-        printf("pattern : 0x%x\n", pattern);             
-	    sleep_ms(1000);
+        //printf("Apattern : 0x%x\n", pattern);             
+	    sleep_ms(10);
     }
 
     return 0;
