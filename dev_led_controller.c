@@ -34,9 +34,12 @@
 #include "led_param.h"
 #include "hardware/gpio.h" //for gpio irq
 #include "led_controller.h"
-
+#include "pico/sem.h"
+#include "hardware/vreg.h"
 #define usb_hw_set hw_set_alias(usb_hw)
 #define usb_hw_clear hw_clear_alias(usb_hw)
+
+static struct semaphore led_frame_sem;
 
 uint32_t test_pattern = COLOR_WHITE;
 
@@ -719,29 +722,49 @@ int8_t get_id_num(uint8_t *buf){
 
 // Device specific functions
 void ep1_out_handler(uint8_t *buf, uint16_t len) {
+    unsigned int pattern = 0;
+	int n,m;
     int8_t res = get_id_num(buf);
     if(res == -2){//got cmd!
         printf("got cmd!\n");
     }else if(res == -1){
-        memcpy((led_rgb_buf[panel_id] + data_offset), buf, len);
+        memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id] + data_offset), buf, len);
         data_offset += len; 
     }else if((res >= 0)&&(res <=7)){
-        memcpy((led_rgb_buf[panel_id]), buf + 4, len - 4 );
+#if 1
+        if( res == 0){
+            sem_acquire_blocking(&led_frame_sem);
+            if(rgb_buf_write_idx == 0){
+                rgb_buf_write_idx = 1;
+            }else{
+                rgb_buf_write_idx = 0;
+            }
+            sem_release(&led_frame_sem);
+        } 
+#endif
+        memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id]), buf + 4, len - 4 );
         data_offset += len-4; 
     }else{
         //printf("buf : %s!\n", buf);
     }
-    /*if(get_id_num(buf) != -1){
-        memcpy(&led_rgb_buf[panel_id] + data_offset, buf, len);
-        data_offset += len;
-    }else{
-        memcpy(&led_rgb_buf[panel_id][0], &buf[4], len - 4 );
-        data_offset += len-4;
-    } */   	
+
+#if 0 //for testing sync frame    
+    if(res == 7){
+	    for(int j = 0; j < LED_HEIGHT; j++){
+	        for(int i = 0; i < LED_WIDTH; i++){
+                for(n = 0; n < LED_PANEL_COUNT; n ++){
+                    pattern = (led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
+                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
+                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
+                    //printf("pattern : 0x%x\n", pattern);             
+                    put_pixel_by_panel(n, pattern);
+                }
+	        }
+	    }
+
+    }
+#endif
     usb_start_transfer(usb_get_endpoint_configuration(EP1_OUT_ADDR), NULL, 64);
-    // Send data back to host
-    //struct usb_endpoint_configuration *ep = usb_get_endpoint_configuration(EP2_IN_ADDR);
-    //usb_start_transfer(ep, buf, len);
 }
 
 void ep2_in_handler(uint8_t *buf, uint16_t len) {
@@ -752,11 +775,24 @@ void ep2_in_handler(uint8_t *buf, uint16_t len) {
 
 int main(void) {
     unsigned int pattern = 0;
-	int n,m;
+	int n, m, l;
+    int force_refresh = 1;
+    int pre_rgb_buf_idx = -1;
     stdio_init_all();
     printf("USB Device Low-Level hardware example\n");
     usb_device_init();
     pio_initial();
+
+    //test over clocking
+    //vreg_set_voltage(VREG_VOLTAGE_1_20);
+    //sleep_ms(1000);
+    //set_sys_clock_khz(2500000, false);
+
+    sem_init(&led_frame_sem, 1, 1);
+
+
+
+
 #if 0 //marked gpio irq function
     int ret = gpio_get_dir(15);
     printf("gpio 15 dir is %d\n", ret); //default is in
@@ -769,41 +805,63 @@ int main(void) {
     }
 
 	//fill initial color
-    for(int n = 0; n < LED_PANEL_COUNT; n++){
-		for(int m = 0; m < 2880; m++ ){
-			if((m%3) == 0){               //0x400000 400000 400000  => red
-				led_rgb_buf[n][m] = 0x08;
-			}if((m%3) == 2){                 //0x000040 000040 000040  => blue
-				led_rgb_buf[n][m] = 0x08;
-			}if((m%3) == 1){                 //0x004000 004000 004000  => green 
-				led_rgb_buf[n][m] = 0x08;
-			}
-            /*else{
-				led_rgb_buf[n][m] = 0x00;	
-			}*/
-		}
-	}
+    for(l = 0; l < 2; l ++ ){
+        for(n = 0; n < LED_PANEL_COUNT; n++){
+		    for(m = 0; m < 2880; m++ ){
+			    if((m%3) == 0){               //0x400000 400000 400000  => red
+				    led_rgb_buf[l][n][m] = 0x08;
+			    }if((m%3) == 2){                 //0x000040 000040 000040  => blue
+				    led_rgb_buf[l][n][m] = 0x08;
+			    }if((m%3) == 1){                 //0x004000 004000 004000  => green 
+				    led_rgb_buf[l][n][m] = 0x08;
+			    }
+		    }
+	    }
+    }
     // Get ready to rx from host
     usb_start_transfer(usb_get_endpoint_configuration(EP1_OUT_ADDR), NULL, 64);
-
 
     // Everything is interrupt driven so just loop here
     while (1) {
         //tight_loop_contents(); //marked this busy loop
 	    //test pattern
+#if 1
+        sem_acquire_blocking(&led_frame_sem);
+        if(rgb_buf_write_idx == 0){
+            rgb_buf_read_idx = 1;
+        }else{
+            rgb_buf_read_idx = 0;
+        }
+        sem_release(&led_frame_sem);
+        if(pre_rgb_buf_idx != rgb_buf_read_idx){
+            pre_rgb_buf_idx = rgb_buf_read_idx;
+            force_refresh = 1;
+        }else{
+            force_refresh = 0;
+        }
+#endif
+        if(force_refresh == 0){
+	        sleep_ms(3);
+            continue;
+        }else{
+        
+        }
 	    for(int j = 0; j < LED_HEIGHT; j++){
 	        for(int i = 0; i < LED_WIDTH; i++){
                 for(n = 0; n < LED_PANEL_COUNT; n ++){
-                    pattern = (led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
-                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
-                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
+                    pattern = (led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
+                                ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
+                                ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
                     //printf("pattern : 0x%x\n", pattern);             
                     put_pixel_by_panel(n, pattern);
                 }
 	        }
 	    }
+        //sem_release(&led_frame_sem);
         //printf("Apattern : 0x%x\n", pattern);             
-	    sleep_ms(10);
+	    //sleep_ms(10); //ori
+	    sleep_ms(3);
+	    //sleep_ms(30);
     }
 
     return 0;

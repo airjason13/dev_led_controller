@@ -41,7 +41,21 @@ inep = usb.util.find_descriptor(
 assert inep is not None
 assert outep is not None
 
-test_string = "Hello World!"
+test_string = "id1:"*720
+outep.write(test_string)
+test_string = "id2:"*720
+outep.write(test_string)
+test_string = "id3:"*720
+outep.write(test_string)
+test_string = "id4:"*720
+outep.write(test_string)
+test_string = "id5:"*720
+outep.write(test_string)
+test_string = "id6:"*720
+outep.write(test_string)
+test_string = "id7:"*720
+outep.write(test_string)
+test_string = "id8:"*720
 outep.write(test_string)
 #from_device = inep.read(len(test_string))
 
