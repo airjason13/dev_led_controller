@@ -733,17 +733,17 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
     }else if((res >= 0)&&(res <=7)){
 #if 1
         if( res == 0){
-            sem_acquire_blocking(&led_frame_sem);
+            //sem_acquire_blocking(&led_frame_sem);
             if(rgb_buf_write_idx == 0){
                 rgb_buf_write_idx = 1;
             }else{
                 rgb_buf_write_idx = 0;
             }
-            sem_release(&led_frame_sem);
+            //sem_release(&led_frame_sem);
         } 
-#endif
         memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id]), buf + 4, len - 4 );
         data_offset += len-4; 
+#endif
     }else{
         //printf("buf : %s!\n", buf);
     }
@@ -826,13 +826,13 @@ int main(void) {
         //tight_loop_contents(); //marked this busy loop
 	    //test pattern
 #if 1
-        sem_acquire_blocking(&led_frame_sem);
+        //sem_acquire_blocking(&led_frame_sem);
         if(rgb_buf_write_idx == 0){
             rgb_buf_read_idx = 1;
         }else{
             rgb_buf_read_idx = 0;
         }
-        sem_release(&led_frame_sem);
+        //sem_release(&led_frame_sem);
         if(pre_rgb_buf_idx != rgb_buf_read_idx){
             pre_rgb_buf_idx = rgb_buf_read_idx;
             force_refresh = 1;
