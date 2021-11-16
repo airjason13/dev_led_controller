@@ -727,11 +727,16 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
     int8_t res = get_id_num(buf);
     if(res == -2){//got cmd!
         printf("got cmd!\n");
+    }else if(res == -3){
+        printf("got hello!\n");
+        sprintf(buf, "%s", VERSION);
+        struct usb_endpoint_configuration *ep = usb_get_endpoint_configuration(EP2_IN_ADDR);
+        usb_start_transfer(ep, buf, 15);
+        return;
     }else if(res == -1){
         memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id] + data_offset), buf, len);
         data_offset += len; 
     }else if((res >= 0)&&(res <=7)){
-#if 1
         if( res == 0){
             //sem_acquire_blocking(&led_frame_sem);
             if(rgb_buf_write_idx == 0){
@@ -743,27 +748,10 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
         } 
         memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id]), buf + 4, len - 4 );
         data_offset += len-4; 
-#endif
     }else{
         //printf("buf : %s!\n", buf);
     }
 
-#if 0 //for testing sync frame    
-    if(res == 7){
-	    for(int j = 0; j < LED_HEIGHT; j++){
-	        for(int i = 0; i < LED_WIDTH; i++){
-                for(n = 0; n < LED_PANEL_COUNT; n ++){
-                    pattern = (led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
-                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
-                                ((led_rgb_buf[n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
-                    //printf("pattern : 0x%x\n", pattern);             
-                    put_pixel_by_panel(n, pattern);
-                }
-	        }
-	    }
-
-    }
-#endif
     usb_start_transfer(usb_get_endpoint_configuration(EP1_OUT_ADDR), NULL, 64);
 }
 
@@ -788,7 +776,7 @@ int main(void) {
     //sleep_ms(1000);
     //set_sys_clock_khz(2500000, false);
 
-    sem_init(&led_frame_sem, 1, 1);
+    //sem_init(&led_frame_sem, 1, 1);
 
 
 
