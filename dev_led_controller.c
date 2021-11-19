@@ -43,6 +43,11 @@ static struct semaphore led_frame_sem;
 
 uint32_t test_pattern = COLOR_WHITE;
 
+int width_interval = 0;
+int height_interval = 0;
+int LED_WIDTH = 80;//40;
+int LED_HEIGHT = 12;//24;
+
 void gpio_callback(uint gpio, uint32_t events);
 int32_t gpio_irq_enable(uint32_t gpio, void* callback, uint32_t condition);
 
@@ -53,7 +58,6 @@ int64_t alarm_callback(alarm_id_t id, void *user_data) {
     // Can return a value here in us to fire in the future
     return 0;
 }
-
 
 void gpio_callback(uint gpio, uint32_t events) {
     gpio_set_irq_enabled_with_callback(15, NULL, false, NULL);
@@ -80,8 +84,6 @@ int32_t gpio_irq_enable(uint32_t gpio, void* callback, uint32_t condition) {
 }
 
 // add for LED apa104 control
-int LED_WIDTH = 40;
-int LED_HEIGHT = 24;
 const int PIN_TX_0 = 4;
 const int PIN_TX_1 = 5;
 const int PIN_TX_2 = 6;
@@ -719,6 +721,39 @@ int8_t get_id_num(uint8_t *buf){
     return id_tmp; 
 }
 
+char* parser_cmd(char *cmd){
+    char *reply = malloc(64);
+    char *tmp0 = malloc(64);
+    char *tmp1 = malloc(64);
+    memset(tmp0, 0, 64);
+    memset(tmp1, 0, 64);
+    if(strstr(cmd, "set_port_res")){
+        sscanf(cmd, "cmd:set_port_res,%s,%s", tmp0, tmp1);
+        memset(reply, 0, 64);
+        LED_WIDTH=atoi(tmp0);
+        LED_HEIGHT=atoi(tmp1);
+        sprintf(reply, "OK!%s%s", tmp0, tmp1);
+    }else if(strstr(cmd, "set_interval")){
+        sscanf(cmd, "cmd:set_interval,%s", tmp0);
+        if((atoi(tmp0) < 0)||(atoi(tmp0) > 10)){
+            sprintf(reply, "NG!%s", tmp0);
+            
+        }else{    
+            if(atoi(tmp0) != 0){
+                width_interval = atoi(tmp0) + 1;
+                height_interval = atoi(tmp0) + 1;    
+                sprintf(reply, "OK!%s", tmp0);
+            }else{
+                width_interval = 0;
+                height_interval = 0;
+                sprintf(reply, "OK!%d", atoi(tmp0));
+            }
+        }
+    }else{
+        sprintf(reply, "unknown cmd\n");
+    }
+    return reply;
+}
 
 // Device specific functions
 void ep1_out_handler(uint8_t *buf, uint16_t len) {
@@ -727,6 +762,12 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
     int8_t res = get_id_num(buf);
     if(res == -2){//got cmd!
         printf("got cmd!\n");
+        char *reply = parser_cmd(buf);
+        memset(buf, 0, 64);
+        sprintf(buf, "%s", reply);
+        struct usb_endpoint_configuration *ep = usb_get_endpoint_configuration(EP2_IN_ADDR);
+        usb_start_transfer(ep, buf, 64);
+        return;
     }else if(res == -3){
         printf("got hello!\n");
         sprintf(buf, "%s", VERSION);
@@ -795,7 +836,7 @@ int main(void) {
 	//fill initial color
     for(l = 0; l < 2; l ++ ){
         for(n = 0; n < LED_PANEL_COUNT; n++){
-		    for(m = 0; m < 2880; m++ ){
+		    for(m = 0; m < (LED_WIDTH*LED_HEIGHT*COLOR_CHANNEL); m++ ){
 			    if((m%3) == 0){               //0x400000 400000 400000  => red
 				    led_rgb_buf[l][n][m] = 0x08;
 			    }if((m%3) == 2){                 //0x000040 000040 000040  => blue
@@ -837,9 +878,13 @@ int main(void) {
 	    for(int j = 0; j < LED_HEIGHT; j++){
 	        for(int i = 0; i < LED_WIDTH; i++){
                 for(n = 0; n < LED_PANEL_COUNT; n ++){
+                    //if((i % 2 == 0)&&(j % 2 == 0)){
                     pattern = (led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
                                 ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
                                 ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
+                    //}else{
+                    //    pattern = 0x000000;
+                    //}
                     //printf("pattern : 0x%x\n", pattern);             
                     put_pixel_by_panel(n, pattern);
                 }
