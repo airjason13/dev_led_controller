@@ -728,16 +728,15 @@ char* parser_cmd(char *cmd){
     memset(tmp0, 0, 64);
     memset(tmp1, 0, 64);
     if(strstr(cmd, "set_port_res")){
-        sscanf(cmd, "cmd:set_port_res,%s,%s", tmp0, tmp1);
+        sscanf(cmd, "cmd:set_port_res,%d,%d", LED_WIDTH, LED_HEIGHT);
         memset(reply, 0, 64);
-        LED_WIDTH=atoi(tmp0);
-        LED_HEIGHT=atoi(tmp1);
-        sprintf(reply, "OK!%s%s", tmp0, tmp1);
-    }else if(strstr(cmd, "set_interval")){
-        sscanf(cmd, "cmd:set_interval,%s", tmp0);
+        //LED_WIDTH=atoi(tmp0);
+        //LED_HEIGHT=atoi(tmp1);
+        sprintf(reply, "OK!%d,%d", LED_WIDTH, LED_HEIGHT);
+    }else if(strstr(cmd, "set_pixel_interval")){
+        sscanf(cmd, "cmd:set_pixel_interval,%s", tmp0);
         if((atoi(tmp0) < 0)||(atoi(tmp0) > 10)){
-            sprintf(reply, "NG!%s", tmp0);
-            
+            sprintf(reply, "NG!%s", tmp0); 
         }else{    
             if(atoi(tmp0) != 0){
                 width_interval = atoi(tmp0) + 1;
@@ -878,13 +877,13 @@ int main(void) {
 	    for(int j = 0; j < LED_HEIGHT; j++){
 	        for(int i = 0; i < LED_WIDTH; i++){
                 for(n = 0; n < LED_PANEL_COUNT; n ++){
-                    //if((i % 2 == 0)&&(j % 2 == 0)){
+                    if((i % height_interval == 0)&&(j % width_interval == 0)){
                     pattern = (led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL)]  << 8 )+  
                                 ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 1]) << 16) +
                                 ((led_rgb_buf[rgb_buf_read_idx][n][(j*LED_WIDTH*COLOR_CHANNEL) + (i*COLOR_CHANNEL) + 2]));
-                    //}else{
-                    //    pattern = 0x000000;
-                    //}
+                    }else{
+                        pattern = 0x000000;
+                    }
                     //printf("pattern : 0x%x\n", pattern);             
                     put_pixel_by_panel(n, pattern);
                 }

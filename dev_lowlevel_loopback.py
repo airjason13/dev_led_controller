@@ -57,11 +57,11 @@ test_string = "id7:"*720
 outep.write(test_string)
 test_string = "id8:"*720
 outep.write(test_string)'''
-test_string = "cmd:set_res,80,12"
+test_string = "cmd:set_port_res,80,12"
 outep.write(test_string)
 from_device = inep.read(64)
 print("Device Says: {}".format(''.join([chr(x) for x in from_device])))
-test_string = "cmd:set_interval,6"
+test_string = "cmd:set_pixel_interval,6"
 outep.write(test_string)
 from_device = inep.read(64)
 print("Device Says: {}".format(''.join([chr(x) for x in from_device])))
