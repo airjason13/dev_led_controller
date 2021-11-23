@@ -848,15 +848,15 @@ int main(void) {
     }
 
 	//fill initial color
-    for(l = 0; l < 2; l ++ ){
+    for(l = 0; l < 3; l ++ ){
         for(n = 0; n < LED_PANEL_COUNT; n++){
 		    for(m = 0; m < (LED_WIDTH*LED_HEIGHT*COLOR_CHANNEL); m++ ){
 			    if((m%3) == 0){               //0x400000 400000 400000  => red
-				    led_rgb_buf[l][n][m] = 0x08;
+				    led_rgb_buf[l][n][m] = 0x02;
 			    }if((m%3) == 2){                 //0x000040 000040 000040  => blue
-				    led_rgb_buf[l][n][m] = 0x08;
+				    led_rgb_buf[l][n][m] = 0x02;
 			    }if((m%3) == 1){                 //0x004000 004000 004000  => green 
-				    led_rgb_buf[l][n][m] = 0x08;
+				    led_rgb_buf[l][n][m] = 0x02;
 			    }
 		    }
 	    }
