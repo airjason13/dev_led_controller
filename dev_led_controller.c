@@ -35,12 +35,14 @@
 #include "hardware/gpio.h" //for gpio irq
 #include "led_controller.h"
 #include "pico/sem.h"
+#include "pico/critical_section.h"
 #include "hardware/vreg.h"
 #define usb_hw_set hw_set_alias(usb_hw)
 #define usb_hw_clear hw_clear_alias(usb_hw)
 
-static struct semaphore led_frame_sem;
-
+//struct semaphore led_frame_sem;
+critical_section_t c_s;
+int force_refresh = 1;
 uint32_t test_pattern = COLOR_WHITE;
 
 int width_interval = 0;
@@ -779,12 +781,25 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
     }else if((res >= 0)&&(res <=7)){
         if( res == 0){
             //sem_acquire_blocking(&led_frame_sem);
+            critical_section_enter_blocking(&c_s);
+            if(rgb_buf_write_idx == 2){
+                rgb_buf_write_idx = 0; 
+            }else{
+                rgb_buf_write_idx ++;
+            }
             if(rgb_buf_write_idx == 0){
+                rgb_buf_read_idx = 2;
+            }else{
+                rgb_buf_read_idx = rgb_buf_write_idx - 1;
+            }
+            force_refresh = 1;
+            /*if(rgb_buf_write_idx == 0){
                 rgb_buf_write_idx = 1;
             }else{
                 rgb_buf_write_idx = 0;
-            }
+            }*/
             //sem_release(&led_frame_sem);
+            critical_section_exit(&c_s);
         } 
         memcpy((led_rgb_buf[rgb_buf_write_idx][panel_id]), buf + 4, len - 4 );
         data_offset += len-4; 
@@ -804,7 +819,7 @@ void ep2_in_handler(uint8_t *buf, uint16_t len) {
 int main(void) {
     unsigned int pattern = 0;
 	int n, m, l;
-    int force_refresh = 1;
+    //int force_refresh = 1;
     int pre_rgb_buf_idx = -1;
     stdio_init_all();
     printf("USB Device Low-Level hardware example\n");
@@ -817,7 +832,7 @@ int main(void) {
     //set_sys_clock_khz(2500000, false);
 
     //sem_init(&led_frame_sem, 1, 1);
-
+    critical_section_init(&c_s);
 
 
 
@@ -853,23 +868,26 @@ int main(void) {
     while (1) {
         //tight_loop_contents(); //marked this busy loop
 	    //test pattern
-#if 1
+        int output = 0;
         //sem_acquire_blocking(&led_frame_sem);
-        if(rgb_buf_write_idx == 0){
+        critical_section_enter_blocking(&c_s);
+        /*if(rgb_buf_write_idx == 0){
             rgb_buf_read_idx = 1;
         }else{
             rgb_buf_read_idx = 0;
-        }
+        }*/
+        output = force_refresh;
+        critical_section_exit(&c_s);
         //sem_release(&led_frame_sem);
-        if(pre_rgb_buf_idx != rgb_buf_read_idx){
+        /*if(pre_rgb_buf_idx != rgb_buf_read_idx){
             pre_rgb_buf_idx = rgb_buf_read_idx;
             force_refresh = 1;
         }else{
             force_refresh = 0;
-        }
-#endif
-        if(force_refresh == 0){
+        }*/
+        if(output == 0){
 	        sleep_ms(3);
+            //critical_section_exit(&c_s);
             continue;
         }else{
         
@@ -890,6 +908,9 @@ int main(void) {
 	        }
 	    }
         //sem_release(&led_frame_sem);
+        critical_section_enter_blocking(&c_s);
+        force_refresh = 0;
+        critical_section_exit(&c_s);
         //printf("Apattern : 0x%x\n", pattern);             
 	    //sleep_ms(10); //ori
 	    sleep_ms(3);
