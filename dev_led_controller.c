@@ -44,7 +44,7 @@
 critical_section_t c_s;
 int force_refresh = 1;
 uint32_t test_pattern = COLOR_WHITE;
-
+bool b_color_test_mode = 0;
 int width_interval = 0;
 int height_interval = 0;
 int LED_WIDTH = 80;//40;
@@ -52,6 +52,8 @@ int LED_HEIGHT = 12;//24;
 
 void gpio_callback(uint gpio, uint32_t events);
 int32_t gpio_irq_enable(uint32_t gpio, void* callback, uint32_t condition);
+
+int i_led_test_color = 0x0;
 
 int64_t alarm_callback(alarm_id_t id, void *user_data) {
     printf("Timer %d fired!\n", (int) id);
@@ -682,7 +684,6 @@ uint8_t tmp_buf[64];
 int8_t get_id_num(uint8_t *buf){
     
     int8_t id_tmp = -1;
-	//printf("Abuf :%s\n", buf);
     if(strncmp("cmd:", buf, 4) == 0){
         printf("got cmd!\n");
         return -2;
@@ -690,7 +691,6 @@ int8_t get_id_num(uint8_t *buf){
         printf("got Hello!\n");
 		return -3;
     }else{
-		//printf("Bbuf :%s\n", buf);
         if(strncmp("id0:", buf, 4) == 0){
             id_tmp = 0;
         }else if(strncmp("id1:", buf, 4) == 0){
@@ -708,15 +708,11 @@ int8_t get_id_num(uint8_t *buf){
         }else if(strncmp("id7:", buf, 4) == 0){
             id_tmp = 7;
         }else{
-			//printf("Cbuf :%s\n", buf);
             id_tmp = -1;
             return id_tmp;//follow ori id
         }
     }
     if(panel_id != id_tmp){
-        //printf("id_tmp = %d\n", id_tmp);
-        //printf("data_offset = %d\n", data_offset);
-		//printf(" %d %d\n", id_tmp, data_offset);
         data_offset = 0;
         panel_id = id_tmp;
     }
@@ -734,7 +730,35 @@ char* parser_cmd(char *cmd){
         memset(reply, 0, 64);
         //LED_WIDTH=atoi(tmp0);
         //LED_HEIGHT=atoi(tmp1);
-        sprintf(reply, "OK!%d,%d", LED_WIDTH, LED_HEIGHT);
+        sprintf(reply, "OK!%d,%d", LED_WIDTH, LED_HEIGHT); 
+    }else if(strstr(cmd, "set_test_color_stop")){
+        b_color_test_mode = false; 
+    }else if(strstr(cmd, "set_test_color_start")){
+        printf("cmd:%s\n", cmd); 
+        unsigned int test_color;
+        sscanf(cmd, "cmd:set_test_color_start,%s", tmp0);
+        b_color_test_mode = true;
+        printf("color:0x%x\n", atoi(tmp0));
+        i_led_test_color = atoi(tmp0);
+        unsigned int i_red = (i_led_test_color >> 16) & 0xff;
+        unsigned int i_green = (i_led_test_color >> 8) & 0xff;
+        unsigned int i_blue = (i_led_test_color) & 0xff;
+        printf("r : %d, g : %d, b: %d\n", i_red, i_green, i_blue);
+        for(int l = 0; l < 3; l ++ ){
+            for(int n = 0; n < LED_PANEL_COUNT; n++){
+		        for(int m = 0; m < (LED_WIDTH*LED_HEIGHT*COLOR_CHANNEL); m++ ){
+			        if((m%3) == 0){               //0x400000 400000 400000  => red
+				        led_rgb_buf[l][n][m] = i_red;
+			        }if((m%3) == 2){                 //0x000040 000040 000040  => blue
+				        led_rgb_buf[l][n][m] = i_green;
+			        }if((m%3) == 1){                 //0x004000 004000 004000  => green 
+				        led_rgb_buf[l][n][m] = i_blue;
+			        }
+		        }
+	        }
+        }
+          
+        sprintf(reply, "OK!%s", tmp0);
     }else if(strstr(cmd, "set_pixel_interval")){
         sscanf(cmd, "cmd:set_pixel_interval,%s", tmp0);
         if((atoi(tmp0) < 0)||(atoi(tmp0) > 10)){
@@ -762,7 +786,7 @@ void ep1_out_handler(uint8_t *buf, uint16_t len) {
 	int n,m;
     int8_t res = get_id_num(buf);
     if(res == -2){//got cmd!
-        printf("got cmd!\n");
+        printf("got cmd!%s\n", buf);
         char *reply = parser_cmd(buf);
         memset(buf, 0, 64);
         sprintf(buf, "%s", reply);
@@ -876,7 +900,11 @@ int main(void) {
         }else{
             rgb_buf_read_idx = 0;
         }*/
-        output = force_refresh;
+        if(b_color_test_mode == true){
+            output = 1;
+        }else{
+            output = force_refresh;
+        }
         critical_section_exit(&c_s);
         //sem_release(&led_frame_sem);
         /*if(pre_rgb_buf_idx != rgb_buf_read_idx){
