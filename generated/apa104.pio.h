@@ -15,14 +15,16 @@
 #define ws2812_wrap_target 0
 #define ws2812_wrap 3
 
-#define ws2812_T1 2
-#define ws2812_T2 5
-#define ws2812_T3 3
+#define ws2812_T1 6
+#define ws2812_T2 20
+#define ws2812_T3 4
+#define ws2812_T4 5
+#define ws2812_T5 5
 
 static const uint16_t ws2812_program_instructions[] = {
             //     .wrap_target
-    0x6221, //  0: out    x, 1            side 0 [2] 
-    0x1123, //  1: jmp    !x, 3           side 1 [1] 
+    0x6321, //  0: out    x, 1            side 0 [3] 
+    0x1523, //  1: jmp    !x, 3           side 1 [5] 
     0x1400, //  2: jmp    0               side 1 [4] 
     0xa442, //  3: nop                    side 0 [4] 
             //     .wrap
@@ -50,7 +52,8 @@ static inline void ws2812_program_init(PIO pio, uint sm, uint offset, uint pin, 
     sm_config_set_sideset_pins(&c, pin);
     sm_config_set_out_shift(&c, false, true, rgbw ? 32 : 24);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
-    int cycles_per_bit = ws2812_T1 + ws2812_T2 + ws2812_T3;
+    //int cycles_per_bit = ws2812_T1 + ws2812_T2 + ws2812_T3;
+    int cycles_per_bit = ws2812_T2;
     float div = clock_get_hz(clk_sys) / (freq * cycles_per_bit);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
